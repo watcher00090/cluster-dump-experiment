@@ -215,11 +215,28 @@ for k in ${!api_groups[@]}; do
         # echo "starter_path = $STARTER_PATH"
         # echo "sz before=${#namespaced_resource_types_in_group[@]}"
 
-        non_namespaced_resource_types_in_group=($(remove_duplicates "${non_namespaced_resource_types_in_group[@]}"))
-        namespaced_resource_types_in_group=($(remove_duplicates "${namespaced_resource_types_in_group[@]}"))
 
         # echo "sz after=${#namespaced_resource_types_in_group[@]}"
     fi
+
+    # Remove the trailing part of resource type names like 'nodes/proxy' 'customresourcedefinitions/status' 'nodes/status'
+    tmp_ret_non_namespaced=()
+    for k in ${!non_namespaced_resource_types_in_group[@]}; do
+        tmp_ret_non_namespaced+=($(sed 's/\([^\/]*\)\/.*/\1/g' <<< "${non_namespaced_resource_types_in_group[$k]}"))
+    done
+    non_namespaced_resource_types_in_group=(${tmp_ret_non_namespaced[@]})
+    tmp_ret_non_namespaced=()
+
+    tmp_ret_namespaced=()
+    for k in ${!namespaced_resource_types_in_group[@]}; do
+        tmp_ret_namespaced+=($(sed 's/\([^\/]*\)\/.*/\1/g' <<< "${namespaced_resource_types_in_group[$k]}"))
+    done
+    namespaced_resource_types_in_group=(${tmp_ret_namespaced[@]})
+    tmp_ret_namespaced=()
+
+    # Remove duplicate resource types
+    non_namespaced_resource_types_in_group=($(remove_duplicates "${non_namespaced_resource_types_in_group[@]}"))
+    namespaced_resource_types_in_group=($(remove_duplicates "${namespaced_resource_types_in_group[@]}"))
 
     # For figuring out the API group of a given resource type, later
     sz_non_namespaced=${#non_namespaced_resource_types_in_group[@]}
@@ -238,7 +255,8 @@ done
 
 # echo "namespaced_resource_types = ${namespaced_resource_types[@]}"
 # echo
-# echo "non_namespaced_resource_types = ${non_namespaced_resource_types[@]}"
+echo "non_namespaced_resource_types = ${non_namespaced_resource_types[@]}"
+printf "\n"
 
 printf "$ kubectl version\n"
 kubectl version
@@ -259,7 +277,7 @@ for idx in ${!non_namespaced_resource_types[@]}; do
 
     resource_type=${non_namespaced_resource_types[$idx]}
     api_group_idx=$(api_group $idx ${num_non_namespaced_resource_types[@]})
-    echo "api_group_idx=$api_group_idx"
+    # echo "api_group_idx=$api_group_idx"
     api_group=${api_groups[$api_group_idx]}
     
     if [ "$api_group" == "core" ]; then
@@ -273,7 +291,7 @@ for idx in ${!non_namespaced_resource_types[@]}; do
     # order the api_versions array so that 'v1alpha1' comes before 'v1beta1' comes before 'v1'
 
     # echo "api_versions_before = ${api_versions[@]}"
-    sift "${api_versions[@]}"
+    # sift "${api_versions[@]}"
 
     api_versions=($(sift "${api_versions[@]}"))
     belongs_to_group_version_k=() # array the same size as the api_versions array, 
@@ -295,20 +313,24 @@ for idx in ${!non_namespaced_resource_types[@]}; do
     # echo "api_group = ${api_group}"
     # echo "api_versions = ${api_versions[@]}"
     # echo "belongs_to_group_version_k = ${belongs_to_group_version_k[@]}"
+    
+    printf "#### $resource_type (API group: $api_group) #### \n\n"
+    printf "$ kubectl get -A $resource_type\n"
+    kubectl get -A ${resource_type}
+    printf "\n"
 
     for k in ${!belongs_to_group_version_k[@]}; do
+        objects=()
+
         if [ "${belongs_to_group_version_k[$k]}" == "1" ]; then
-            printf "$resource_type (API group: $api_group)\n:"
-            printf "Summary:\n"
-            printf "$ kubectl get -A $resource_type\n"
-            kubectl get -A ${resource_type}
 
             objects=($(curl -s $STARTER_PATH/${api_versions[$k]}/$resource_type | jq '.items[].metadata.name' | tr -d \' | tr -d \"))
-            for name in ${objects[@]}; do
-                printf "${name}:"
-                printf "$ kubectl describe ${resource_type}/${name}\n"
-                kubectl describe ${resource_type} ${name}
-            done
+            #for name in ${objects[@]}; do
+                # printf "${name}:"
+                #printf "$ kubectl describe ${resource_type}/${name}\n"
+                #kubectl describe ${resource_type} ${name}
+                #printf "\n"
+            #done
         fi
     done    
 done

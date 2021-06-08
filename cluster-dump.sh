@@ -110,6 +110,9 @@ num_namespaced_resource_types_per_api_group=()
 
 for k in ${!api_groups[@]}; do
     group_name=${api_groups[$k]}
+
+    non_namespaced_resource_types_in_group=()
+    namespaced_resource_types_in_group=()
     
     if [ "$group_name" == "core" ]; then
         STARTER_PATH="${APISERVER}/api" 

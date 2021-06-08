@@ -91,6 +91,32 @@ remove_duplicates() {
     echo "${RET[@]}"
 }
 
+# Arguments: An index into either the number of namespaced resource types per api group array or the 
+#            number of non namespaced resource types per api group array, followed by either the 
+#            namespaced resource types array or the non_namespaced resource types array
+# Outputs the position into the api_groups array of the api group for the given index
+# Outputs -1 if the index is to large to correspond to an api group
+api_group() {
+    local _given_idx;
+    local RESOURCE_COUNT; # stores at index k the number of resources (namespaced or non namespaced depending on the input) in the kth API group
+    local _tot; # number of resources in the first k+1 API groups
+    local _EXITED_LOOP;
+    local _val;
+
+    _given_idx="$1"; shift 
+    RESOURCE_COUNT=("$@");
+    _tot=0; 
+    
+    for _idx in ${!RESOURCE_COUNT[@]}; do
+        _tot=$(($_tot+${RESOURCE_COUNT[$_idx]}))
+        if [ $_given_idx -le $(($_tot-1)) ]; then 
+            _EXITED_LOOP=1
+            break;
+        fi
+    done
+    if [ ! $_EXITED_LOOP ]; then echo -1; fi
+}
+
 # Get and store all api groups in an array
 api_groups=($(curl -s -X GET $APISERVER/apis | jq '.groups[].name' | tr -d \' | tr -d \"))
 api_groups=("core" "${api_groups[@]}")
@@ -179,106 +205,23 @@ for k in ${!api_groups[@]}; do
     # echo "namespaced_resource_types = ${namespaced_resource_types[@]}"
 done
 
-cumulative_num_non_namespaced_resource_types_per_api_group=$(compute_cumulative ${num_non_namespaced_resource_types_per_api_group[@]})
-cumulative_num_namespaced_resource_types_per_api_group=$(compute_cumulative ${num_namespaced_resource_types_per_api_group[@]})
-
 echo "num_namespaced_resource_types_per_api_group = ${num_namespaced_resource_types_per_api_group[@]}"
-echo "cumulative_num_namespaced_resource_types_per_api_group = ${cumulative_num_namespaced_resource_types_per_api_group[@]}"
+echo "num_non_namespaced_resource_types_per_api_group = ${num_namespaced_resource_types_per_api_group[@]}"
 
-# printf "############################################################\n"
-# printf "######################GLOBAL RESOURCES######################\n"
-# printf "############################################################\n"
+echo "namespaced_resource_types = ${namespaced_resource_types[@]}"
+echo
+echo "non_namespaced_resource_types = ${non_namespaced_resource_types[@]}"
 
-# for group_name in ${api_groups[@]}; do
-
-#     if [ "${group_name}" == "core" ]
-#     then
-        
-#         resource_types = ($(curl -s $APISERVER/api/v1/ | jq '.resources[].name' | tr -d \' | tr -d \"))
-#         resource_types_json = ($(curl -s $APISERVER/api/v1/))
-        
-#         for i in ${!resource_types[@]}; do
-
-#             resource_type = ${resource_types[$i]}
-#             if [ "$(dequote $(echo ${resouce_types_json[$i]} | jq '.namespaced') )" == "false"]; then
-            
-#                 printf "############## ${resource_type} (API group: ${group_name}) ##############\n"  
-
-#                 printf "############# SUMMARY #############\n"
-#                 kubectl get ${resource_type}
-
-#                 printf "############ DETAILED DESCRIPTIONS #############\n"
-#                 object_names = ($(curl -s $APISERVER/api/v1/${resource_type}/ | jq '.items[].metadata.name' | tr -d \' | tr -d \"))
-
-#                 for object_name in ${object_names[@]}; do
-#                     printf "${object_name}\n"
-#                     kubectl describe ${resource_type} ${object_name}
-#                     printf "\n"
-#                 done
-#             fi
-
-#         done
-
-#     else  # non-core api group
-#         resource_types = ($(curl -s $APISERVER/apis/${group_name}/v1 | jq '.resources[].name' | tr -d \' | tr -d \"))
-#         resource_types_json = ($(curl -s $APISERVER/apis/${group_name}/v1))
-
-#         for i in ${!resource_types[@]}; do
-#             resource_type = ${resource_types[$i]}
-
-#             if [ "$(dequote $(echo ${resource_types_json[$i]} | jq '.namespaced') )" == "false"]; then
-
-#                 printf "############## ${resource_type} (API group: ${group_name}) ##############\n"  
-
-#                 printf "############# SUMMARY #############\n"
-#                 kubectl get ${resource_type}
-
-#                 printf "############ DETAILED DESCRIPTIONS #############\n"
-#                 object_names = ($(curl -s $APISERVER/apis/${group_name}v1/${resource_type}/ | jq '.items[].metadata.name' | tr -d \' | tr -d \"))
-
-#                 for object_name in ${object_names[@]}; do
-#                     printf "${object_name}\n"
-#                     kubectl describe ${resource_type} ${object_name}
-#                     printf "\n"
-#                 done
-
-#             done
-
-#         done
-
-#     fi
-# done
-
-# printf "############################################################\n"
-# printf "####################NAMESPACED RESOURCES####################\n"
-# printf "############################################################\n"
-
-# for namespace in ${namespaces[@]}; do
-#     printf "############ NAMESPACE : ${namespace} ############\n"
-
-#     for group_name in ${api_groups[@]}; do
-
-#         resource_types = ()
-#         resource_types_json = ()
-#         if [ "$group_name" == "core"]; then
-#             resource_types_json = ($(curl -s $APISEVER/api/v1 | tr -d \' | tr -d \"))
-#             resource_types = ($(curl -s $APISERVER/api/v1 | jq '.resources[].name' | tr -d \' | tr -d \"))
-#         else 
-#             resource_types_json = ($(curl -s $APISERVER/apis/${group_name}/v1 | tr -d \" | tr -d \'))
-#             resource_types = ($(curl -s $APISERVER/apis/${group_name}/v1 | jq '.resources[].name' | tr -d \' | tr -d \"))
-#         fi
-
-#         for i in ${!resource_types[@]}; do
-
-#             resource_type = $( {resource_types_json}[$i] | 
+printf "############################################################\n"
+printf "######################GLOBAL RESOURCES######################\n"
+printf "############################################################\n"
 
 
-#         done
 
+printf "############################################################\n"
+printf "####################NAMESPACED RESOURCES####################\n"
+printf "############################################################\n"
 
-#     done
-
-# done
 
 if [ -z "$(kill -0 $! 2>&1)" ]; then kill $!; wait $!; fi # kill -0 $CHILD_PID returned nothing so the child is still running
 

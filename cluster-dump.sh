@@ -30,7 +30,7 @@ function compute_cumulative() {
         tot=$(($tot+${ARR[$k]}))
         RET+=(${tot})
     done
-    return $RET
+    echo "${RET[@]}"
 }
 
 contains_element () {
@@ -40,9 +40,55 @@ contains_element () {
   return 1
 }
 
-# merge the two passed-in arrays together
-merge_lists() {
+# merge the two passed-in arrays of strings together.
+# must be called as follows: merge_lists <ARRAY_1_SIZE> <ARRAY_1> <ARRAY_2_SIZE> <ARRAY_2>
+# merge_lists() {
+#     declare -i _arr1_size _arr2_size _idx_arr1 _idx_arr2; 
+#     declare -a _arr1 _arr2;
     
+#     _arr1=(); _arr2=();
+#     _arr1_size=$1; shift
+#     _arr1+=($1); shift
+#     _arr2_size=$1; shift
+#     _arr2+=($1); shift
+    
+#     # IFS=$'\n' _sorted_arr1=($(sort <<<"${_arr1[*]}"))
+#     # unset IFS
+#     # IFS=$'\n' _sorted_arr2=($(sort <<<"${_arr2[*]}"))
+#     # unset IFS
+
+#     _idx_arr1=0; _idx_arr2=0;
+    
+#     declare -a _ret;
+
+#     while [ $_idx_arr1 -leq $_arr1_size ]; do
+#         if [ $(contains_element "${_arr1[$_idx_arr1]}" "${ret[@]}") ]; then _ret+=(${_arr1[$_idx_arr1]}); _idx_arr1=$(($_idx_arr1+1)); fi
+#     done
+
+#     while [ $_idx_arr2 -leq $_arr2_size ]; do
+#         if [ $(contains_element "${_arr2[$_idx_arr2]}" "${ret[@]}") ]; then _ret+=(${_arr2[$_idx_arr2]}); _idx_arr2=$(($_idx_arr2+1)); fi
+#     done
+
+#     return ${_ret[@]}
+# }
+
+# array_to_string() {
+#     # Treat the arguments as an array:
+#     local -a array=( "$@" )
+#     declare -p array | sed -e 's/^declare -a array=//'
+# }
+
+# Called as follows: remove_duplicates <ARRAY>
+remove_duplicates() {
+    ARR=("$@"); RET=();
+    for entry in ${ARR[@]}; do
+        contains_element "${entry}" "${RET[@]}"
+        RET_CODE=$?
+        if [ "$RET_CODE" != "0" ]; then 
+            RET+=(${entry});
+        fi
+    done
+    echo "${RET[@]}"
 }
 
 # Get and store all api groups in an array
@@ -65,53 +111,76 @@ num_namespaced_resource_types_per_api_group=()
 for k in ${!api_groups[@]}; do
     group_name=${api_groups[$k]}
     
-    
     if [ "$group_name" == "core" ]; then
-        STARTER_PATH="${APISERVER}/api/"
+        STARTER_PATH="${APISERVER}/api" 
+
+        # the only API version for the core group is v1
+        non_namespaced_resource_types_in_group=($(curl -s $STARTER_PATH/v1 | jq '.resources[] | select(.namespaced==false) | .name' | tr -d \" | tr -d \' ) )
+        namespaced_resource_types_in_group=($(curl -s $STARTER_PATH/v1 | jq '.resources[] | select(.namespaced==true) | .name' | tr -d \" | tr -d \' ) )
     else 
         STARTER_PATH="${APISERVER}/apis/${group_name}"
+
+        api_versions_for_group=($(curl -s $STARTER_PATH | jq '.versions[].version' | tr -d \" | tr -d \')) 
+
+        # echo "api_versions_for_group = ${api_versions_for_group[@]}"
+
+        contains_element "v1alpha1" "${api_versions_for_group[@]}"; RET=$?
+        # echo "v1alpha1: RET = $RET"
+        if [ "$RET" == "0" ]; then 
+            # echo herev1alpha1
+
+            echo "api_versions_for_group = ${api_versions_for_group[@]}"
+
+            non_namespaced_resource_types_in_group+=($(curl -s $STARTER_PATH/v1alpha1 | jq '.resources[] | select(.namespaced==false) | .name' | tr -d \" | tr -d \') )
+            namespaced_resource_types_in_group+=($(curl -s $STARTER_PATH/v1alpha1 | jq '.resources[] | select(.namespaced==true) | .name' | tr -d \" | tr -d \') )
+            # echo therev1alpha1
+        fi 
+
+        contains_element "v1beta1" "${api_versions_for_group[@]}"; RET=$?
+        # echo "v1beta1: RET = $RET"
+        if [ "$RET" == "0" ]; then
+            # echo herev1beta1
+            non_namespaced_resource_types_in_group+=($(curl -s $STARTER_PATH/v1beta1 | jq '.resources[] | select(.namespaced==false) | .name' | tr -d \" | tr -d \') )
+            namespaced_resource_types_in_group+=($(curl -s $STARTER_PATH/v1beta1 | jq '.resources[] | select(.namespaced==true) | .name'  | tr -d \" | tr -d \') )
+            # echo therev1beta1
+        fi
+
+        contains_element "v1" "${api_versions_for_group[@]}"; RET=$?
+        # echo "v1: RET=$RET"
+        if [ "$RET" == "0" ]; then
+            # echo herev1
+            non_namespaced_resource_types_in_group+=($(curl -s $STARTER_PATH/v1 | jq '.resources[] | select(.namespaced==false) | .name' | tr -d \" | tr -d \') )
+            namespaced_resource_types_in_group+=($(curl -s $STARTER_PATH/v1 | jq '.resources[] | select(.namespaced==true) | .name' | tr -d \" | tr -d \') )
+            # echo therev1
+        fi
+
+        echo "group_name = ${group_name}"
+        echo "starter_path = $STARTER_PATH"
+        echo "sz before=${#namespaced_resource_types_in_group[@]}"
+
+        non_namespaced_resource_types_in_group=($(remove_duplicates "${non_namespaced_resource_types_in_group[@]}"))
+        namespaced_resource_types_in_group=($(remove_duplicates "${namespaced_resource_types_in_group[@]}"))
+
+        echo "sz after=${#namespaced_resource_types_in_group[@]}"
     fi
-
-    api_versions_for_group=$(curl -s $STARTER_PATH | jq '.versions[].version')
-
-    # For the namespaced_resource_types array
-    # 1. Merge the two lists of resource types for the different api versions (v1, v1beta1, v1alpha1) for the same api group to get one list of all resource types that the api group supports
-    # 2. For each api group, obtain the: list of resource type names for every api version (so there will be 3 lists: for v1, v1alpha1, and v1beta1)
-    # 3. Loop through the merged resource types list and for each resource type find all api groups that it belongs to (by seeing if the list contains a value with that name). Store that value in the namespaced_resource_types_api_versions array
-    #                at the same index that the value lives in the merged resource types list 
-    # 4. Add the merged resource types list to the back of the namespaced_resource_types array 
-    #
-    # Do the same with the non_namespaced_resource_types array
-
-    if [ "$group_name" == "core" ]; then
-        resource_types=($(curl -s $STARTER_PATH/v1))
-    else 
-        resource_types=($(curl -s $STARTER_PATH/v1))
-    fi
-
-    printf "group_name = ${group_name}\n"
-    echo ${resource_types[@]}
-
-    echo "starting_jq..."    
-    non_namespaced_resource_types_in_group=$(echo ${resource_types[@]} | jq '.resources[] | select(.namespaced == "false") | .name')
-    namespaced_resource_types_in_group=$(echo ${resource_types[@]} | jq '.resources[] | select(.namespaced == "true") | .name')
-    echo "ending_jq..."
 
     # For figuring out the API group of a given resource type, later
-    num_non_namespaced_resource_types_per_api_group+=($(echo ${non_namespaced_resource_types_in_group[@]} | jq '.resources | length'))
-    num_namespaced_resource_types_per_api_group+=($(echo ${namespaced_resource_types_in_group[@]} | jq '.resources | length'))
+    sz_non_namespaced=${#non_namespaced_resource_types_in_group[@]}
+    sz_namespaced=${#namespaced_resource_types_in_group[@]}
+    num_non_namespaced_resource_types_per_api_group=("${num_non_namespaced_resource_types_per_api_group[@]}" "${sz_non_namespaced}")
+    num_namespaced_resource_types_per_api_group=("${num_namespaced_resource_types_per_api_group[@]}" "${sz_namespaced}")
 
     non_namespaced_resource_types+=("${non_namespaced_resource_types_in_group[@]}")
     namespaced_resource_types+=("${namespaced_resource_types_in_group[@]}")
 
-    # printf "namespaced_resource_types = ${namespaced_resource_types[@]}\n"
+    # echo "namespaced_resource_types = ${namespaced_resource_types[@]}"
 done
 
 cumulative_num_non_namespaced_resource_types_per_api_group=$(compute_cumulative ${num_non_namespaced_resource_types_per_api_group[@]})
 cumulative_num_namespaced_resource_types_per_api_group=$(compute_cumulative ${num_namespaced_resource_types_per_api_group[@]})
 
-printf "num_namespaced_resource_types_per_api_group = ${num_namespaced_resource_types_per_api_group[@]}\n"
-printf "cumulative_num_namespaced_resource_types_per_api_group = ${num_namespaced_resource_types_per_api_group[@]}\n"
+echo "num_namespaced_resource_types_per_api_group = ${num_namespaced_resource_types_per_api_group[@]}"
+echo "cumulative_num_namespaced_resource_types_per_api_group = ${cumulative_num_namespaced_resource_types_per_api_group[@]}"
 
 # printf "############################################################\n"
 # printf "######################GLOBAL RESOURCES######################\n"

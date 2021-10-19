@@ -325,12 +325,11 @@ for idx in ${!non_namespaced_resource_types[@]}; do
         if [ "${belongs_to_group_version_k[$k]}" == "1" ]; then
 
             objects=($(curl -s $STARTER_PATH/${api_versions[$k]}/$resource_type | jq '.items[].metadata.name' | tr -d \' | tr -d \"))
-            #for name in ${objects[@]}; do
-                # printf "${name}:"
-                #printf "$ kubectl describe ${resource_type}/${name}\n"
-                #kubectl describe ${resource_type} ${name}
-                #printf "\n"
-            #done
+            for name in ${objects[@]}; do
+                printf "$ kubectl describe ${resource_type}/${name}\n"
+                kubectl describe ${resource_type} ${name}
+                printf "\n"
+            done
         fi
     done    
 done
